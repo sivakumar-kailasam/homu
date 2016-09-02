@@ -64,12 +64,15 @@ def queue(repo_label):
     pull_states = sorted(states)
 
     rows = []
+
+    github_url = g.cfg['github']['enterprise_url'] if not g.cfg['github']['enterprise_url'] else 'github.com'
+
     for state in pull_states:
         rows.append({
             'status': state.get_status(),
             'status_ext': ' (try)' if state.try_ else '',
             'priority': 'rollup' if state.rollup else state.priority,
-            'url': 'https://github.com/{}/{}/pull/{}'.format(state.owner, state.name, state.num),
+            'url': 'https://{}/{}/{}/pull/{}'.format(github_url, state.owner, state.name, state.num),
             'num': state.num,
             'approved_by': state.approved_by,
             'title': state.title,
@@ -77,7 +80,7 @@ def queue(repo_label):
             'mergeable': 'yes' if state.mergeable is True else 'no' if state.mergeable is False else '',
             'assignee': state.assignee,
             'repo_label': state.repo_label,
-            'repo_url': 'https://github.com/{}/{}'.format(state.owner, state.name),
+            'repo_url': 'https://{}/{}/{}'.format(github_url, state.owner, state.name),
         })
 
     return g.tpls['queue'].render(
@@ -89,6 +92,7 @@ def queue(repo_label):
         rolled_up = len([x for x in pull_states if x.rollup]),
         failed = len([x for x in pull_states if x.status == 'failure' or x.status == 'error']),
         multiple = multiple,
+        github_url = github_url,
     )
 
 @get('/callback')
@@ -102,7 +106,8 @@ def callback():
 
     lazy_debug(logger, lambda: 'state: {}'.format(state))
 
-    res = requests.post('https://github.com/login/oauth/access_token', data={
+    github_url = g.cfg['github']['enterprise_url'] if not g.cfg['github']['enterprise_url'] else 'github.com'
+    res = requests.post('https://{}/login/oauth/access_token'.format(github_url), data={
         'client_id': g.cfg['github']['app_client_id'],
         'client_secret': g.cfg['github']['app_client_secret'],
         'code': code,

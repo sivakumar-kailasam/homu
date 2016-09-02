@@ -452,7 +452,7 @@ def create_merge(state, repo_cfg, branch, git_cfg):
         pull = state.get_repo().pull_request(state.num)
 
         fpath = 'cache/{}/{}'.format(repo_cfg['owner'], repo_cfg['name'])
-        url = 'git@github.com:{}/{}.git'.format(repo_cfg['owner'], repo_cfg['name'])
+        url = git_cfg.repo_url.format(repo_cfg['owner'], repo_cfg['name'])
 
         os.makedirs(os.path.dirname(SSH_KEY_FILE), exist_ok=True)
         with open(SSH_KEY_FILE, 'w') as fp:
@@ -529,7 +529,7 @@ def create_merge(state, repo_cfg, branch, git_cfg):
 
     return ''
 
-def start_build(state, repo_cfgs, buildbot_slots, logger, db, git_cfg):
+def start_build(state, repo_cfgs, buildbot_slots, logger, db, git_cfg, travis_api_url):
     if buildbot_slots[0]:
         return True
 
@@ -556,7 +556,7 @@ def start_build(state, repo_cfgs, buildbot_slots, logger, db, git_cfg):
                 if info.state == 'success':
                     mat = re.search('/builds/([0-9]+)$', info.target_url)
                     if mat:
-                        url = 'https://api.travis-ci.org/{}/{}/builds/{}'.format(state.owner, state.name, mat.group(1))
+                        url = 'https://{}/{}/{}/builds/{}'.format(travis_api_url, state.owner, state.name, mat.group(1))
                         res = requests.get(url)
                         travis_sha = json.loads(res.text)['commit']
                         travis_commit = state.get_repo().commit(travis_sha)
@@ -679,7 +679,7 @@ def start_build_or_rebuild(state, repo_cfgs, *args):
 
     return start_build(state, repo_cfgs, *args)
 
-def process_queue(states, repos, repo_cfgs, logger, buildbot_slots, db, git_cfg):
+def process_queue(states, repos, repo_cfgs, logger, buildbot_slots, db, git_cfg, travis_api_url):
     for repo_label, repo in repos.items():
         repo_states = sorted(states[repo_label].values())
 
@@ -699,12 +699,12 @@ def process_queue(states, repos, repo_cfgs, logger, buildbot_slots, db, git_cfg)
 
                 state.save()
 
-                if start_build(state, repo_cfgs, buildbot_slots, logger, db, git_cfg):
+                if start_build(state, repo_cfgs, buildbot_slots, logger, db, git_cfg, travis_api_url):
                     return
 
         for state in repo_states:
             if state.status == '' and state.try_:
-                if start_build(state, repo_cfgs, buildbot_slots, logger, db, git_cfg):
+                if start_build(state, repo_cfgs, buildbot_slots, logger, db, git_cfg, travis_api_url):
                     return
 
 def fetch_mergeability(mergeable_que):
@@ -866,7 +866,12 @@ def main():
         with open('cfg.json') as fp:
             cfg = json.loads(fp.read())
 
-    gh = github3.login(token=cfg['github']['access_token'])
+    github_enterprise_url = cfg['github']['enterprise_url']
+    if not github_enterprise_url:
+        gh = github3.login(token=cfg['github']['access_token'])
+    else:
+        gh = github3.login(token=cfg['github']['access_token'], url='https://api.{}'.format(github_enterprise_url))
+   
     user = gh.user()
     try: user_email = [x for x in gh.iter_emails() if x['primary']][0]['email']
     except IndexError:
@@ -879,11 +884,13 @@ def main():
     my_username = user.login
     repo_labels = {}
     mergeable_que = Queue()
+    repo_url = 'git@'+ github_enterprise_url + ':{}/{}.git' if github_enterprise_url else 'git@github.com:{}/{}.git'
     git_cfg = {
         'name': user.name if user.name else user.login,
         'email': user_email,
         'ssh_key': cfg.get('git', {}).get('ssh_key', ''),
         'local_git': cfg.get('git', {}).get('local_git', False),
+        'repo_url': repo_url,
     }
 
     db_conn = sqlite3.connect('main.db', check_same_thread=False, isolation_level=None)
@@ -1002,7 +1009,8 @@ def main():
     queue_handler_lock = Lock()
     def queue_handler():
         with queue_handler_lock:
-            return process_queue(states, repos, repo_cfgs, logger, buildbot_slots, db, git_cfg)
+            travis_api_url = cfg['travis.enterprise_api_url'] if cfg['travis.enterprise_api_url'] else 'api.travis-ci.org'
+            return process_queue(states, repos, repo_cfgs, logger, buildbot_slots, db, git_cfg, travis_api_url)
 
     os.environ['GIT_SSH'] = os.path.join(os.path.dirname(__file__), 'git_helper.py')
     os.environ['GIT_EDITOR'] = 'cat'

@@ -10,6 +10,14 @@ access_token = ""
 app_client_id = ""
 app_client_secret = ""
 
+# Only if your repo is hosted on a Github Enterprise domain
+# eg github.imaginary.io
+enterprise_url = ""
+
+[travis]
+# Enterprise travis url, eg travis.imaginary.io/api
+enterprise_api_url=""
+
 [git]
 
 # Use the local Git command. Required to use some advanced features. It also

@@ -100,7 +100,7 @@
                     nums.push(num);
                 }
 
-                location = 'https://github.com/login/oauth/authorize' +
+                location = 'https://{{github_url}}/login/oauth/authorize' +
                     '?client_id={{oauth_client_id}}' +
                     '&scope=public_repo,admin:repo_hook' +
                     '&state=' + encodeURIComponent(JSON.stringify({
@@ -113,7 +113,7 @@
             document.getElementById('synch').onclick = function(ev) {
                 if (!confirm('Retrieve all pull requests?')) return;
 
-                location = 'https://github.com/login/oauth/authorize' +
+                location = 'https://{{github_url}}/login/oauth/authorize' +
                     '?client_id={{oauth_client_id}}' +
                     '&scope=public_repo,admin:repo_hook' +
                     '&state=' + encodeURIComponent(JSON.stringify({
